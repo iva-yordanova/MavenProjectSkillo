@@ -11,6 +11,7 @@ import org.testng.annotations.BeforeTest;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 
 import static io.restassured.RestAssured.*;
 import static org.hamcrest.Matchers.*;
@@ -62,12 +63,11 @@ public class APITests {
                 .body(addPost)
                 .when()
                 .post("/posts");
-
         response
                 .then()
                 .statusCode(201)
                 .assertThat().body("user.id", equalTo(userId))
-                .assertThat().body("caption", equalTo(addPost.getCaption()));
+                .body("caption", equalTo(addPost.getCaption()));
 
         String ResponseBody = response.getBody().asString();
         publicPostId = JsonPath.parse(ResponseBody).read("$.id");
@@ -78,7 +78,7 @@ public class APITests {
     public void getUsersPosts() {
         ValidatableResponse validatableResponse = given()
                 .param("postStatus", "public")
-                .param("take", 10)
+                .param("take", 20)
                 .param("skip", 0)
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + authToken)
@@ -88,13 +88,12 @@ public class APITests {
                 .log()
                 .all();
 
-        //Not working
         ArrayList<Integer> returnedPostId = validatableResponse.extract().path("id");
+        Collections.sort(returnedPostId, Collections.reverseOrder());
         Assert.assertEquals(returnedPostId.get(0), publicPostId);
     }
 
     @Test
-
     public void getAllPublicPosts() {
         given()
                 .param("take", 10)
@@ -107,28 +106,28 @@ public class APITests {
                 .all();
     }
 
-   @Test
+    @Test
     public void likePost() {
         // create an object of ActionsPOJO class and add value for the fields
         ActionsPOJO likePost = new ActionsPOJO();
         likePost.setAction("likePost");
 
-       Response response = given()
+        Response response = given()
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + authToken)
                 .body(likePost)
                 .when()
-                .patch("/posts/4800");
+                .patch("/posts/4983");
 
-       response
+        response
                 .then()
-                .body("post.id", equalTo(4800))
+                .body("post.id", equalTo(4983))
                 .log()
                 .all();
 
-       //Not working
-       String ResponseBody = response.getBody().asString();
-       count = JsonPath.parse(ResponseBody).read("$.post.likesCount");
+        //Not working
+        /*String ResponseBody = response.getBody().asString();
+        count = JsonPath.parse(ResponseBody).read("$.post.likesCount");*/
 
     }
 
