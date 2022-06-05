@@ -1,17 +1,17 @@
 package APITests;
 
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
-import io.restassured.response.Response;
-import io.restassured.response.ValidatableResponse;
+import io.restassured.response.*;
+import org.hamcrest.Matchers;
 import org.testng.Assert;
-import org.testng.annotations.BeforeTest;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 
 import static io.restassured.RestAssured.*;
 import static org.hamcrest.Matchers.*;
@@ -20,26 +20,60 @@ import static org.hamcrest.Matchers.*;
 public class APITests {
 
     static String authToken;
-    static int publicPostId;
-    static int userId, count;
+    static Integer publicPostId;
+    static Integer userId, count, commentId;
+    static String BirthDate;
+    static String milliseconds;
 
-    @BeforeTest
-    public void loginTest() throws JsonProcessingException {
+    //Set baseURI
+
+    @BeforeClass
+    public void setup() {
+        baseURI = "http://training.skillo-bg.com:3100";
+    }
+
+    static SignUpPOJO signUp = new SignUpPOJO();
+
+    //Register new user
+
+    @Test(priority = -1)
+    public void signUp() {
+        Date date = new Date();
+        SimpleDateFormat DateFor = new SimpleDateFormat("dd.MM.yyyy");
+        BirthDate = DateFor.format(date);
+        String currentDate = String.valueOf(date.getTime());
+        milliseconds = currentDate.substring(9, 13);
+        baseURI = "http://training.skillo-bg.com:3100";
+
+        signUp.setUsername("test" + milliseconds);
+        signUp.setEmail("test" + milliseconds + "@abv.bg");
+        signUp.setBirthDate(BirthDate);
+        signUp.setPassword("test" + milliseconds);
+        signUp.setPublicInfo("test" + milliseconds);
+        Response response = given()
+                .header("Content-Type", "application/json")
+                .body(signUp)
+                .when()
+                .post(baseURI + "/users");
+        response
+                .then()
+                .statusCode(201);
+    }
+
+    //Log in with the registered user
+
+    @Test(priority = 1)
+    public void loginTest() {
 
         LoginPOJO login = new LoginPOJO();
-        login.setUsernameOrEmail("test0712");
-        login.setPassword("Test0712");
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        String convertLoginPojoToJSON = objectMapper.writeValueAsString(login);
-
-        baseURI = "http://training.skillo-bg.com:3100";
+        login.setUsernameOrEmail(signUp.getUsername());
+        login.setPassword(signUp.getPassword());
 
         Response response = given()
                 .header("Content-Type", "application/json")
-                .body(convertLoginPojoToJSON)
+                .body(login)
                 .when()
-                .post("/users/login");
+                .post(baseURI + "/users/login");
 
         response
                 .then()
@@ -50,7 +84,30 @@ public class APITests {
         userId = JsonPath.parse(loginResponseBody).read("$.user.id");
     }
 
-    @Test
+    //Edit user's info
+
+    @Test(priority = 2)
+    public void editProfile() {
+        signUp.setPublicInfo("update" + milliseconds);
+        signUp.setProfilePicUrl("https://i.imgur.com/ShkOiCf.jpeg");
+
+        ValidatableResponse validatableResponse = given()
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + authToken)
+                .body(signUp)
+                .when()
+                .put(baseURI + "/users")
+                .then()
+                .log()
+                .body()
+                .statusCode(200)
+                .assertThat().body("user.publicInfo", equalTo(signUp.getPublicInfo()))
+                .assertThat().body("user.profilePicUrl", equalTo(signUp.getProfilePicUrl()));
+    }
+
+    //Add public post
+
+    @Test (priority=2)
     public void addPublicPost() {
         ActionsPOJO addPost = new ActionsPOJO();
         addPost.setCaption("Post content");
@@ -65,6 +122,8 @@ public class APITests {
                 .post("/posts");
         response
                 .then()
+                .log()
+                .all()
                 .statusCode(201)
                 .assertThat().body("user.id", equalTo(userId))
                 .body("caption", equalTo(addPost.getCaption()));
@@ -73,7 +132,8 @@ public class APITests {
         publicPostId = JsonPath.parse(ResponseBody).read("$.id");
     }
 
-    @Test
+    //Check user's posts
+    @Test (priority=3)
 
     public void getUsersPosts() {
         ValidatableResponse validatableResponse = given()
@@ -83,7 +143,7 @@ public class APITests {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + authToken)
                 .when()
-                .get("/users/2557/posts")
+                .get("/users/"+userId+"/posts")
                 .then()
                 .log()
                 .all();
@@ -93,20 +153,9 @@ public class APITests {
         Assert.assertEquals(returnedPostId.get(0), publicPostId);
     }
 
-    @Test
-    public void getAllPublicPosts() {
-        given()
-                .param("take", 10)
-                .param("skip", 0)
-                .header("Content-Type", "application/json")
-                .when()
-                .get("/posts/public")
-                .then()
-                .log()
-                .all();
-    }
+    //Like and dislike a post
 
-    @Test
+    @Test(priority=3, groups="LikePost")
     public void likePost() {
         // create an object of ActionsPOJO class and add value for the fields
         ActionsPOJO likePost = new ActionsPOJO();
@@ -117,37 +166,116 @@ public class APITests {
                 .header("Authorization", "Bearer " + authToken)
                 .body(likePost)
                 .when()
-                .patch("/posts/4983");
+                .patch("/posts/"+publicPostId);
+
+        String ResponseBody = response.getBody().asString();
+        count = JsonPath.parse(ResponseBody).read("$.post.likesCount");
 
         response
                 .then()
-                .body("post.id", equalTo(4983))
-                .log()
-                .all();
-
-        //Not working
-        /*String ResponseBody = response.getBody().asString();
-        count = JsonPath.parse(ResponseBody).read("$.post.likesCount");*/
-
+                .body("post.id", equalTo(publicPostId))
+                .body("post.likesCount", equalTo(count));
     }
 
-    @Test
+    @Test(priority=3, dependsOnGroups = "LikePost")
+    public void unLikePost() {
+        // create an object of ActionsPOJO class and add value for the fields
+        ActionsPOJO likePost = new ActionsPOJO();
+        likePost.setAction("likePost");
+
+        Response response = given()
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + authToken)
+                .body(likePost)
+                .when()
+                .patch("/posts/"+publicPostId);
+
+        response
+                .then()
+                .body("post.id", equalTo(publicPostId))
+                .body("post.likesCount", lessThan(count));
+    }
+
+    //Comment a post and delete it
+
+    @Test(priority=3, groups="Comment")
     public void commentPost() {
         ActionsPOJO commentPost = new ActionsPOJO();
         commentPost.setContent("My New Comment!");
 
-        given()
+        ValidatableResponse validatableResponse=given()
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + authToken)
                 .body(commentPost)
                 .when()
-                .post("/posts/4800/comment")
+                .post(baseURI+"/posts/" + publicPostId+"/comment")
                 .then()
                 .body("content", equalTo("My New Comment!"))
                 .log()
                 .all()
                 .statusCode(201);
+
+        commentId = validatableResponse.extract().path("id");
     }
 
+    @Test(priority=3, dependsOnGroups = "Comment")
+    public void deleteComment() {
+
+        given()
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + authToken)
+            .when()
+            .delete(baseURI+ "/posts/" + publicPostId+"/comments/"+commentId)
+            .then()
+            .statusCode(200);
+    }
+
+    @Test(priority=4)
+
+    public void deletePost(){
+        given()
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + authToken)
+                .when()
+                .delete(baseURI + "/posts/" +publicPostId)
+                .then()
+                .statusCode(200);
+    }
+
+    @Test(priority=5)
+
+    public void noPosts(){
+
+        ValidatableResponse response = given()
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + authToken)
+                .param("postStatus", "public")
+                .param("take", 20)
+                .param("skip", 0)
+                .when()
+                .get(baseURI+"/users/"+userId+"/posts")
+                .then()
+                .log()
+                .all()
+                .assertThat().body("", Matchers.empty());
+    }
+
+
+    @AfterClass(description = "delete user")
+    public void deleteUser() {
+
+        // delete the user
+        Response deleteResponse = given()
+                .header("Authorization", "Bearer " + authToken)
+                .header("Content-Type", "application/json")
+                .when()
+                .delete(baseURI + "/users/"+userId);
+
+        deleteResponse
+                .then()
+                .log()
+                .body()
+                .statusCode(200);
+    }
 
 }
