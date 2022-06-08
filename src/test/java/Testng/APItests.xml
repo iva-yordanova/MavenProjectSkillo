@@ -1,7 +1,7 @@
 <suite name="Suite1" verbose="1" parallel="classes">
     <test name="Regression">
         <classes>
-            <class name="APITests.APITests"/>
+            <class name="SeleniumTests.FirstTest"/>
         </classes>
     </test>
 </suite>
