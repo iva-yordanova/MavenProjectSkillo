@@ -1,32 +1,34 @@
 package SeleniumTests;
 
 import io.github.bonigarcia.wdm.WebDriverManager;
-import org.openqa.selenium.Alert;
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.Assert;
 import org.testng.annotations.*;
-
 import java.time.Duration;
 import java.util.List;
-import java.util.Set;
+
 
 public class HerokuAppTests {
 
     WebDriver driver;
     WebDriverWait wait;
     Actions actions;
+    JavascriptExecutor js;
 
     @BeforeMethod
     public void setUp() {
         WebDriverManager.chromedriver().setup();
         driver = new ChromeDriver();
+        //implicit wait - wait certain time before throwing no such element
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(20));
         actions = new Actions(driver);
+        js = (JavascriptExecutor) driver;
+        //explicit wait - add custom conditions and should be set
+        wait = new WebDriverWait(driver, Duration.ofSeconds(10));
 
     }
 
@@ -184,7 +186,121 @@ public class HerokuAppTests {
         Assert.assertEquals(driver.getCurrentUrl(), "https://the-internet.herokuapp.com/users/1");
     }
 
+    /*@Test
+    public void dynamicContent(){
+        driver.get("https://the-internet.herokuapp.com/dynamic_content");
+
+        List<WebElement> pList = driver.findElements(By.xpath("//div[@class='large-10 columns']"));
+        for (WebElement text:pList){
+            text.getText();
+            System.out.println(text);
+        }
+        driver.navigate().refresh();
+save the elements, click here, assert that the first two are static, assert that the third is dynamic
+
+    }*/
+
+    @Test
+    public void floatingMenu() {
+        driver.get("https://the-internet.herokuapp.com/floating_menu");
+        //WebElement floatingMenuContainer  = driver.findElement(By.xpath("//div[@id='menu']"));
+
+        //asset floating elements is there when opening the page
+        WebElement homeButtonMenu = driver.findElement(By.xpath("//*[@id='menu']//a[text()='Home']"));
+        Assert.assertTrue(homeButtonMenu.isDisplayed());
+
+        //scroll the page down
+        js.executeScript("window.scrollBy(0,-2000)");
+        Assert.assertTrue(homeButtonMenu.isDisplayed());
+
+        //scroll the page up
+        js.executeScript("window.scrollBy(0,1000)");
+        //Assert.assertTrue(homeButtonMenu.isDisplayed());
+        wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[@id='menu']//a[text()='Home']")));
+        Assert.assertTrue(homeButtonMenu.isDisplayed());
+
+        //click on the button
+        js.executeScript("arguments[0].click()", homeButtonMenu);
+        Assert.assertEquals(driver.getCurrentUrl(), "https://the-internet.herokuapp.com/floating_menu#home");
+    }
+
+    @Test
+    public void dynamicControls() {
+        driver.get("https://the-internet.herokuapp.com/dynamic_controls");
+
+        //assert the dynamic checkbox is present after loading the page
+        WebElement checkBox = driver.findElement(By.id("checkbox"));
+        Assert.assertTrue(checkBox.isDisplayed());
+
+        //click the remove button
+        WebElement removeButton = driver.findElement(By.xpath("//button[text()='Remove']"));
+        removeButton.click();
+
+        //wait until the animation for the removing the checkbox is gone
+        WebElement loadingAnimation = driver.findElement(By.xpath("//div[@id='loading']"));
+        wait.until(ExpectedConditions.invisibilityOf(loadingAnimation));
+
+        //Assert that the checkbox is not displayed
+        Assert.assertFalse(checkBox.isDisplayed());
+        wait.until(ExpectedConditions.invisibilityOf(checkBox));
+        Assert.assertEquals(driver.findElement(By.id("message")).getText(), "It's gone!");
+
+        //fluent wait example
+        /*Wait<WebDriver> wait = new FluentWait<WebDriver>(driver)
+                .withTimeout(Duration.ofSeconds(38))
+                .pollingEvery(Duration.ofSeconds(1))
+                .ignoring(NoSuchFieldException.class);*/
+    }
+
+    @Test
+    public void dynamicLoading() {
+        driver.get("https://the-internet.herokuapp.com/dynamic_loading/2");
+
+        //not good practice. We should use webelement
+        By startButton = By.xpath("//div[@id='start']/button");
+        By helloWorldText = By.xpath("//div[@id='finish']");
+
+        WebElement startButtonWebElement = driver.findElement(startButton);
+        startButtonWebElement.click();
+
+        WebElement helloWorldTextWebElement = driver.findElement(helloWorldText);
 
 
+    }
+
+    @Test
+    public void iFrames() {
+        driver.get("https://the-internet.herokuapp.com/iframe");
+
+        //step into the frame in which the web element is located
+        driver.switchTo().frame("mce_0_ifr");
+        //now we can find and save the element
+        WebElement textElement = driver.findElement(By.xpath("//*[@id='tinymce']//p"));
+        textElement.clear();
+        textElement.sendKeys("some text");
+
+        //switch back to the main document or first frame
+        driver.switchTo().defaultContent();
+        //now we can find and save the element
+        WebElement headerText = driver.findElement(By.xpath("//div[@class='example']/h3"));
+    }
+
+    @Test
+    public void nestedFrames() {
+        driver.get("https://the-internet.herokuapp.com/nested_frames");
+
+        driver.switchTo().frame("frame-top").switchTo().frame("frame-left");
+        WebElement leftFrameBodyText = driver.findElement(By.xpath("//body"));
+        Assert.assertEquals(leftFrameBodyText.getText(), "LEFT");
+
+        //We can use defaultContent or parentFrame. When we use defaultContent we should switch to top and then to middle
+        /*driver.switchTo().defaultContent();
+        driver.switchTo().frame("frame-top").switchTo().frame("frame-middle");*/
+
+        //Switch to parent frame and then to the middle
+        driver.switchTo().parentFrame().switchTo().frame("frame-middle");
+        WebElement middleFrameBodyText = driver.findElement(By.xpath("//body"));
+        Assert.assertEquals(middleFrameBodyText.getText(), "MIDDLE");
+
+    }
 }
-
